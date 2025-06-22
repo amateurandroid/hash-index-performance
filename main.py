@@ -106,14 +106,14 @@ def main():
                 linear_search(df, ids)
                 linear_durations.append(time.time() - start_time)
             # Store stats
-            stats_hash[pattern_name]['mean'].append(np.mean(hash_durations))
-            stats_hash[pattern_name]['min'].append(np.min(hash_durations))
-            stats_hash[pattern_name]['max'].append(np.max(hash_durations))
-            stats_hash[pattern_name]['std'].append(np.std(hash_durations))
-            stats_linear[pattern_name]['mean'].append(np.mean(linear_durations))
-            stats_linear[pattern_name]['min'].append(np.min(linear_durations))
-            stats_linear[pattern_name]['max'].append(np.max(linear_durations))
-            stats_linear[pattern_name]['std'].append(np.std(linear_durations))
+            def record_stats(stats_dict, pattern, durations):
+                stats_dict[pattern]['mean'].append(np.mean(durations))
+                stats_dict[pattern]['min'].append(np.min(durations))
+                stats_dict[pattern]['max'].append(np.max(durations))
+                stats_dict[pattern]['std'].append(np.std(durations))
+
+            record_stats(stats_hash, pattern_name, hash_durations)
+            record_stats(stats_linear, pattern_name, linear_durations)
             print(f"\nNumber of searches: {n} | Pattern: {pattern_name}")
             print(f"  Hash Index: mean={np.mean(hash_durations):.6f}s, min={np.min(hash_durations):.6f}s, max={np.max(hash_durations):.6f}s, std={np.std(hash_durations):.6f}s")
             print(f"  Linear Search: mean={np.mean(linear_durations):.6f}s, min={np.min(linear_durations):.6f}s, max={np.max(linear_durations):.6f}s, std={np.std(linear_durations):.6f}s")
@@ -131,27 +131,26 @@ def main():
         json.dump(results, f, default=convert_np, indent=2)
     print('Results saved to results.json')
 
-    plt.figure(figsize=(12, 7))
-    for pattern_name in patterns_names + ['Mixed', 'Missing']:
-        plt.errorbar(search_sizes, stats_hash[pattern_name]['mean'], yerr=stats_hash[pattern_name]['std'], marker='o', label=f'Hash Index ({pattern_name})')
-    plt.xlabel('Number of Searches')
-    plt.ylabel('Time (seconds)')
-    plt.title('Hash Index Search: Mean and Std of Search Times by Pattern')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    def plot_search_performance(stats, search_sizes, patterns_names, title_prefix, marker_style):
+        plt.figure(figsize=(12, 7))
+        for pattern_name in patterns_names + ['Mixed', 'Missing']:
+            plt.errorbar(
+                search_sizes,
+                stats[pattern_name]['mean'],
+                yerr=stats[pattern_name]['std'],
+                marker=marker_style,
+                label=f'{title_prefix} ({pattern_name})'
+            )
+        plt.xlabel('Number of Searches')
+        plt.ylabel('Time (seconds)')
+        plt.title(f'{title_prefix}: Mean and Std of Search Times by Pattern')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
 
-    plt.figure(figsize=(12, 7))
-    for pattern_name in patterns_names + ['Mixed', 'Missing']:
-        plt.errorbar(search_sizes, stats_linear[pattern_name]['mean'], yerr=stats_linear[pattern_name]['std'], marker='x', label=f'Linear Search ({pattern_name})')
-    plt.xlabel('Number of Searches')
-    plt.ylabel('Time (seconds)')
-    plt.title('Linear Search: Mean and Std of Search Times by Pattern')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    plot_search_performance(stats_hash, search_sizes, patterns_names, 'Hash Index', 'o')
+    plot_search_performance(stats_linear, search_sizes, patterns_names, 'Linear Search', 'x')
 
 if __name__ == "__main__":
     import cProfile
