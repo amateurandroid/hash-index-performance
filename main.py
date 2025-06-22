@@ -4,6 +4,7 @@ import random
 import matplotlib.pyplot as plt
 import cProfile
 import numpy as np
+import json
 
 def build_hash_index(df):
     hash_index = {}
@@ -116,6 +117,19 @@ def main():
             print(f"\nNumber of searches: {n} | Pattern: {pattern_name}")
             print(f"  Hash Index: mean={np.mean(hash_durations):.6f}s, min={np.min(hash_durations):.6f}s, max={np.max(hash_durations):.6f}s, std={np.std(hash_durations):.6f}s")
             print(f"  Linear Search: mean={np.mean(linear_durations):.6f}s, min={np.min(linear_durations):.6f}s, max={np.max(linear_durations):.6f}s, std={np.std(linear_durations):.6f}s")
+
+    def convert_np(obj):
+        if isinstance(obj, np.generic):
+            return obj.item()
+        return obj
+    results = {
+        'search_sizes': search_sizes,
+        'stats_hash': stats_hash,
+        'stats_linear': stats_linear
+    }
+    with open('results.json', 'w') as f:
+        json.dump(results, f, default=convert_np, indent=2)
+    print('Results saved to results.json')
 
     plt.figure(figsize=(12, 7))
     for pattern_name in patterns_names + ['Mixed', 'Missing']:
