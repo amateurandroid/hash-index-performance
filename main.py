@@ -1,53 +1,163 @@
 import pandas as pd
 import time
 import random
+import matplotlib.pyplot as plt
+import cProfile
+import numpy as np
+import json
 
-#Reading the CSV
-df = pd.read_csv("pricerunner_aggregate.csv")
+def build_hash_index(df):
+    hash_index = {}
+    for idx, row in df.iterrows():
+        product_id = row['Product ID']
+        hash_index[product_id] = row
+    return hash_index
 
-#Striping extra spaces in column names
-df.columns = df.columns.str.strip()
+def hash_index_search(hash_index, product_ids):
+    for pid in product_ids:
+        _ = hash_index.get(pid, None)
 
-#Printing first 5 rows
-print(df.head())
+def linear_search(df, product_ids):
+    for pid in product_ids:
+        _ = df[df["Product ID"] == pid]
 
-#Printing column names
-print("\nColumns in the dataset:")
-print(df.columns)
+def main():
+    #Reading the CSV
+    df = pd.read_csv("pricerunner_aggregate.csv")
 
-#Simple hash index using a dictionary
-hash_index = {}
+    #Striping extra spaces in column names
+    df.columns = df.columns.str.strip()
 
-#Loop over the DataFrame and populate the index
-for idx, row in df.iterrows():
-    product_id = row['Product ID']
-    hash_index[product_id] = row
+    #Printing first 5 rows
+    print(df.head())
 
-#Searching by product ID
-search_id = 3
-result = hash_index.get(search_id, "Not found")
+    #Printing column names
+    print("\nColumns in the dataset:")
+    print(df.columns)
 
-print(f"\nSearch result for Product ID {search_id}:")
-print(result)
+    #Simple hash index using a dictionary
+    hash_index = {}
 
-#Performance Comparison
-#100 random product IDs
-random_ids = random.sample(df["Product ID"].tolist(), 100)
+    hash_index = build_hash_index(df)
 
-#Hash index search
-start_time = time.time()
+    #Searching by product ID
+    search_id = 3
+    result = hash_index.get(search_id, "Not found")
 
-for pid in random_ids:
-    _ = hash_index.get(pid, None)
+    print(f"\nSearch result for Product ID {search_id}:")
+    print(result)
 
-hash_duration = time.time() - start_time
-print(f"\nTime to search 100 product IDs using Hash Index: {hash_duration:.6f} seconds")
+    #Performance Comparison
 
-#Linear Search
-start_time = time.time()
+    # Timing the hash index search
+    search_sizes = [10, 100, 1000, 5000, 10000]
+    # Prepare timing storage for each pattern
+    patterns_names = ["Random", "Sequential", "Clustered"]
 
-for pid in random_ids:
-    _ = df[df["Product ID"] == pid]
+    repetitions = 7  # Number of times to repeat each timing for statistics
+    # Prepare storage for stats
+    stats_hash = {name: {'mean': [], 'min': [], 'max': [], 'std': []} for name in patterns_names + ['Mixed', 'Missing']}
+    stats_linear = {name: {'mean': [], 'min': [], 'max': [], 'std': []} for name in patterns_names + ['Mixed', 'Missing']}
 
-linear_duration = time.time() - start_time
-print(f"Time to search 100 product IDs using Linear Search: {linear_duration:.6f} seconds")
+    print("\nPerformance comparison for different numbers of searches (sequential, random, clustered, mixed, missing):")
+
+    for n in search_sizes:
+        n = min(n, len(df["Product ID"]))
+        product_ids = df["Product ID"].tolist()
+        max_id = max(product_ids)
+        min_id = min(product_ids)
+
+        # Query patterns
+        random_ids = random.sample(product_ids, n)
+        # Sequential queries: take a contiguous range
+        start_idx = random.randint(0, len(product_ids) - n)
+        sequential_ids = product_ids[start_idx:start_idx + n]
+        # Clustered queries: pick k clusters of size n//k
+        k = min(5, n)  # number of clusters
+        cluster_size = n // k if k > 0 else n
+        clustered_ids = []
+        for _ in range(k):
+            cluster_start = random.randint(0, len(product_ids) - cluster_size)
+            clustered_ids.extend(product_ids[cluster_start:cluster_start + cluster_size])
+        clustered_ids = clustered_ids[:n]  # ensure length n
+        # Mixed queries: half existing, half missing
+        existing_ids = random_ids[:n//2]
+        missing_ids = [max_id + i + 1 for i in range(n - n//2)]
+        mixed_ids = existing_ids + missing_ids
+        # All missing queries
+        all_missing_ids = [max_id + i + 1 for i in range(n)]
+
+        pattern_dict = {
+            'Random': random_ids,
+            'Sequential': sequential_ids,
+            'Clustered': clustered_ids,
+            'Mixed': mixed_ids,
+            'Missing': all_missing_ids
+        }
+
+        for pattern_name, ids in pattern_dict.items():
+            hash_durations = []
+            linear_durations = []
+            for _ in range(repetitions):
+                start_time = time.time()
+                hash_index_search(hash_index, ids)
+                hash_durations.append(time.time() - start_time)
+                start_time = time.time()
+                linear_search(df, ids)
+                linear_durations.append(time.time() - start_time)
+            # Store stats
+            def record_stats(stats_dict, pattern, durations):
+                stats_dict[pattern]['mean'].append(np.mean(durations))
+                stats_dict[pattern]['min'].append(np.min(durations))
+                stats_dict[pattern]['max'].append(np.max(durations))
+                stats_dict[pattern]['std'].append(np.std(durations))
+
+            record_stats(stats_hash, pattern_name, hash_durations)
+            record_stats(stats_linear, pattern_name, linear_durations)
+            print(f"\nNumber of searches: {n} | Pattern: {pattern_name}")
+            print(f"  Hash Index: mean={np.mean(hash_durations):.6f}s, min={np.min(hash_durations):.6f}s, max={np.max(hash_durations):.6f}s, std={np.std(hash_durations):.6f}s")
+            print(f"  Linear Search: mean={np.mean(linear_durations):.6f}s, min={np.min(linear_durations):.6f}s, max={np.max(linear_durations):.6f}s, std={np.std(linear_durations):.6f}s")
+
+    def convert_np(obj):
+        if isinstance(obj, np.generic):
+            return obj.item()
+        return obj
+    results = {
+        'search_sizes': search_sizes,
+        'stats_hash': stats_hash,
+        'stats_linear': stats_linear
+    }
+    with open('results.json', 'w') as f:
+        json.dump(results, f, default=convert_np, indent=2)
+    print('Results saved to results.json')
+
+    def plot_search_performance(stats, search_sizes, patterns_names, title_prefix, marker_style):
+        plt.figure(figsize=(12, 7))
+        for pattern_name in patterns_names + ['Mixed', 'Missing']:
+            plt.errorbar(
+                search_sizes,
+                stats[pattern_name]['mean'],
+                yerr=stats[pattern_name]['std'],
+                marker=marker_style,
+                label=f'{title_prefix} ({pattern_name})'
+            )
+        plt.xlabel('Number of Searches')
+        plt.ylabel('Time (seconds)')
+        plt.title(f'{title_prefix}: Mean and Std of Search Times by Pattern')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    plot_search_performance(stats_hash, search_sizes, patterns_names, 'Hash Index', 'o')
+    plot_search_performance(stats_linear, search_sizes, patterns_names, 'Linear Search', 'x')
+
+if __name__ == "__main__":
+    import cProfile
+    import pstats
+
+    with cProfile.Profile() as pr:
+        main()
+    stats = pstats.Stats(pr)
+    stats.strip_dirs().sort_stats('cumulative').print_stats('main.py', 40)
+    stats.print_callees('main.py')
