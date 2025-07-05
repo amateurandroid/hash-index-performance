@@ -52,12 +52,12 @@ def main():
     # Timing the hash index search
     search_sizes = [10, 100, 1000, 5000, 10000]
     # Prepare timing storage for each pattern
-    patterns_names = ["Random", "Sequential", "Clustered"]
+    patterns_names = ["Random", "Sequential", "Clustered", 'Mixed', 'Missing']
 
-    repetitions = 7  # Number of times to repeat each timing for statistics
+    repetitions = 10  # Number of times to repeat each timing for statistics
     # Prepare storage for stats
-    stats_hash = {name: {'mean': [], 'min': [], 'max': [], 'std': []} for name in patterns_names + ['Mixed', 'Missing']}
-    stats_linear = {name: {'mean': [], 'min': [], 'max': [], 'std': []} for name in patterns_names + ['Mixed', 'Missing']}
+    stats_hash = {name: {'mean': [], 'min': [], 'max': [], 'std': []} for name in patterns_names}
+    stats_linear = {name: {'mean': [], 'min': [], 'max': [], 'std': []} for name in patterns_names}
 
     print("\nPerformance comparison for different numbers of searches (sequential, random, clustered, mixed, missing):")
 
@@ -132,8 +132,8 @@ def main():
     print('Results saved to results.json')
 
     def plot_search_performance(stats, search_sizes, patterns_names, title_prefix, marker_style):
-        plt.figure(figsize=(12, 7))
-        for pattern_name in patterns_names + ['Mixed', 'Missing']:
+        plt.figure(figsize=(12, 10))
+        for pattern_name in patterns_names:
             plt.errorbar(
                 search_sizes,
                 stats[pattern_name]['mean'],
@@ -151,6 +151,97 @@ def main():
 
     plot_search_performance(stats_hash, search_sizes, patterns_names, 'Hash Index', 'o')
     plot_search_performance(stats_linear, search_sizes, patterns_names, 'Linear Search', 'x')
+
+    speedup = {}
+    for pattern in patterns_names:
+        speedup[pattern] = [l/h if h > 0 else None for l, h in zip(stats_linear[pattern]['mean'], stats_hash[pattern]['mean'])]
+
+    plt.figure(figsize=(10, 6))
+    for pattern in patterns_names:
+        plt.plot(search_sizes, speedup[pattern], marker='o', label=f'Speedup ({pattern})')
+    plt.xlabel('Number of Searches')
+    plt.ylabel('Linear Search Time / Hash Index Time')
+    plt.title('Speedup of Hash Index over Linear Search')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    for stat in ['min', 'max', 'std']:
+        plt.figure(figsize=(10, 6))
+    for pattern in patterns_names:
+        plt.plot(search_sizes, [stats_hash[pattern][stat][i] for i in range(len(search_sizes))], marker='o', label=f'{pattern}')
+    plt.xlabel('Number of Searches')
+    plt.ylabel(f'{stat.capitalize()} Time (seconds)')
+    plt.title(f'Hash Index: {stat.capitalize()} Search Time by Pattern')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    # Min, Max, Std for Linear Search
+    for stat in ['min', 'max', 'std']:
+        plt.figure(figsize=(10, 6))
+        for pattern in patterns_names:
+            plt.plot(search_sizes, [stats_linear[pattern][stat][i] for i in range(len(search_sizes))], marker='x', label=f'{pattern}')
+        plt.xlabel('Number of Searches')
+        plt.ylabel(f'{stat.capitalize()} Time (seconds)')
+        plt.title(f'Linear Search: {stat.capitalize()} Search Time by Pattern')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    plt.figure(figsize=(10, 6))
+    data = [stats_hash[pattern]['mean'] for pattern in patterns_names]
+    plt.boxplot(data, labels=patterns_names)
+    plt.ylabel('Time (seconds)')
+    plt.title('Hash Index: Boxplot of Mean Search Times (across patterns)')
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(10, 6))
+    for pattern in patterns_names:
+        plt.plot(search_sizes, stats_hash[pattern]['mean'], marker='o', label=f'Hash Index ({pattern})')
+        plt.plot(search_sizes, stats_linear[pattern]['mean'], marker='x', label=f'Linear Search ({pattern})')
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlabel('Number of Searches (log scale)')
+    plt.ylabel('Time (seconds, log scale)')
+    plt.title('Log-Log Plot: Search Performance Scaling')
+    plt.legend()
+    plt.grid(True, which='both')
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(10, 6))
+    bar_width = 0.35
+    index = np.arange(len(patterns_names))
+    hash_means = [stats_hash[pattern]['mean'][-1] for pattern in patterns_names]
+    linear_means = [stats_linear[pattern]['mean'][-1] for pattern in patterns_names]
+    plt.bar(index, hash_means, bar_width, label='Hash Index')
+    plt.bar(index + bar_width, linear_means, bar_width, label='Linear Search')
+    plt.xlabel('Pattern')
+    plt.ylabel('Time (seconds)')
+    plt.title('Search Time by Pattern (Largest Search Size)')
+    plt.xticks(index + bar_width / 2, patterns_names)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(10, 6))
+    for pattern in patterns_names:
+        hash_per_search = [m/n for m, n in zip(stats_hash[pattern]['mean'], search_sizes)]
+        linear_per_search = [m/n for m, n in zip(stats_linear[pattern]['mean'], search_sizes)]
+        plt.plot(search_sizes, hash_per_search, marker='o', label=f'Hash Index ({pattern})')
+        plt.plot(search_sizes, linear_per_search, marker='x', label=f'Linear Search ({pattern})')
+    plt.xlabel('Number of Searches')
+    plt.ylabel('Time per Search (seconds)')
+    plt.title('Average Time per Search by Pattern')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     import cProfile
